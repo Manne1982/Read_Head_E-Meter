@@ -7,7 +7,7 @@ enum {flagRH1 = 0x01, flagRH2 = 0x02};
 
 //MQTT Login
 const char MQTT_Username[]= "User";
-const char MQTT_Password[]= "12345";
+const char MQTT_Password[]= "1234";
 const char MQTT_Server[]= "192.168.178.2";
 const char MQTT_rootpath[]= "/PowerBox/ElectricMeter";
 const uint16_t MQTT_Port = 1883;
