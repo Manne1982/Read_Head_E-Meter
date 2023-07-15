@@ -14,8 +14,6 @@ const uint8_t MSGStartMeterReadingSupply[] = {0x01, 0x00, 0x02, 0x08, 0x00, 0xFF
 const uint8_t MSGEnd[] = {0x01, 0x77, 0x07};
 uint64_t Counter = 0;
 unsigned long lastReading = 0;
-uint8_t ReadNumber[2] = {1, 1};
-uint8_t Mode = 3; // 0 = no counter active | 1 = Z1 is active | 2 = Z2 is active | 3 = Z1 and Z2 is active
 uint32_t CountVar = 0; //Variable for count the successful data reception
 int16_t currentUsage[2] = {0, 0};
 uint32_t counterValue[2][2] = {0, 0, 0, 0};

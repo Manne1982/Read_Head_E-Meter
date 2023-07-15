@@ -46,7 +46,7 @@ void setup() {
   MQTTinit();
   */
   wdt_enable(WDTO_4S);
-  TimeOut = millis() + 10000;
+  TimeOut = millis() + readTimeout_Seconds;
 }
 
 void loop() {
@@ -55,7 +55,7 @@ void loop() {
   {
     Mode &= ~(1<<((CountVar%2)+1));
     CountVar++;
-    TimeOut = millis() + 10000;
+    TimeOut = millis() + readTimeout_Seconds;
   }
   if (Serial.available()) //Daten auf Serieller Schnittstelle angekommen
   {
@@ -63,6 +63,7 @@ void loop() {
     int length = Serial.readBytes(Buffer, 450);
     Buffer[length] = 0;
     switchSerialInput(((CountVar + 1)%2) + 1, Mode);
+    TimeOut = millis() + readTimeout_Seconds;
     currentUsage[CountVar%2] = evaluateData((uint8_t *)Buffer, length, &counterValue[CountVar%2][0]);
     if(((counterValue[CountVar%2][0]-counterValueOld[CountVar%2][0]) < 1000)&&((counterValue[CountVar%2][1]-counterValueOld[CountVar%2][1]) < 1000))
     {
