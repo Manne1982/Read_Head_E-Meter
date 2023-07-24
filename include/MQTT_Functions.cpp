@@ -2,9 +2,9 @@
 #include "GlobalVariabels.h"
 #include <EthernetENC.h>
 #include <PubSubClient.h>
-#include "Project_Settings.h"
+#include "Project_Settings_1.h"
 
-String MQTTSubscribeRoot[] = {"/Settings/Mode", "/Settings/ReadNumberZ1", "/Settings/ReadNumberZ2"};
+String MQTTSubscribeRoot[] = {"/Settings/Mode", "/Settings/RelationZ1", "/Settings/RelationZ2"};
 
 //MQTT-Funktionen
 void MQTT_callback(char* topic, byte* payload, unsigned int length)

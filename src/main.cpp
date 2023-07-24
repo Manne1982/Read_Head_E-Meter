@@ -2,18 +2,18 @@
 #include <EthernetENC.h>
 #include <PubSubClient.h>
 #include "MQTT_Functions.h"
-#include "Project_Settings.h"
+#include "Project_Settings_1.h"
 #include "GlobalVariabels.h"
 #include <avr/wdt.h>
-#define BGTDEBUG 1
-#define CRC16 0x8005
-#define IOZ1 2
-#define IOZ2 3
+//#define BGTDEBUG 1
+#define IOZ2 2
+#define IOZ1 3
+
 
 
 int convertStrtoHEXStr(const uint8_t * _Input, char * _Output, uint16_t _CharCount);
 int16_t evaluateData(uint8_t * Data, uint16_t length, uint32_t * CounterStates);
-void switchSerialInput(uint8_t Counter, uint8_t Mode);
+void switchSerialInput(uint8_t Output, uint8_t Mode);
 
 
 void setup() {
@@ -46,25 +46,45 @@ void setup() {
   MQTTinit();
   */
   wdt_enable(WDTO_4S);
-  TimeOut = millis() + readTimeout_Seconds;
+  delay(1000);
+  TimeOut = millis() + readTimeout_Seconds *1000;
+  switchSerialInput(1, Mode);
 }
 
 void loop() {
 
-  if(TimeOut < millis())
+  if((TimeOut < millis()) && (Mode & 0x03))
   {
-    Mode &= ~(1<<((CountVar%2)+1));
+    #ifdef BGTDEBUG
+      Serial.print("Timeout Z");
+      Serial.println((CountVar%2) +1);
+    #endif
+
+    Mode &= ~(1<<((CountVar)%2));
     CountVar++;
-    TimeOut = millis() + readTimeout_Seconds;
+    switchSerialInput(((CountVar)%2) + 1, Mode);
+    TimeOut = millis() + readTimeout_Seconds * 1000;
+
+    #ifdef BGTDEBUG
+      Serial.print("Mode: ");
+      Serial.println(Mode);
+    #endif
+
   }
   if (Serial.available()) //Daten auf Serieller Schnittstelle angekommen
   {
-    char Buffer[450] = "";
     int length = Serial.readBytes(Buffer, 450);
     Buffer[length] = 0;
+    #ifdef BGTDEBUG
+      Serial.print("Länge: ");
+      Serial.println(length);
+    #endif
+    if(length < 300)
+      goto End;
     switchSerialInput(((CountVar + 1)%2) + 1, Mode);
-    TimeOut = millis() + readTimeout_Seconds;
+    TimeOut = millis() + readTimeout_Seconds * 1000;
     currentUsage[CountVar%2] = evaluateData((uint8_t *)Buffer, length, &counterValue[CountVar%2][0]);
+
     if(((counterValue[CountVar%2][0]-counterValueOld[CountVar%2][0]) < 1000)&&((counterValue[CountVar%2][1]-counterValueOld[CountVar%2][1]) < 1000))
     {
 //      MQTT_sendMessage(MQTT_MSG_PowerConsumption + (CountVar%2), currentUsage[CountVar%2]);
@@ -92,9 +112,14 @@ void loop() {
       if((counterValueOld[CountVar%2][1] == 0)&&(counterValue[CountVar%2][1]))
         counterValueOld[CountVar%2][1] = counterValue[CountVar%2][1];
     }
-    if((Mode & 0x03)==3)
+    ReadRelationsCount++;
+    if(((Mode & 0x03)==3)&&(ReadRelationsCount >= ReadRelations[CountVar%2]))
+    {
       CountVar++;
+      ReadRelationsCount = 0;
+    }
   }
+  End:
   wdt_reset();
 }
 
@@ -191,11 +216,16 @@ int16_t evaluateData(uint8_t * Data, uint16_t length, uint32_t * CounterStates)
   }
   for(int i = 0; i < 3; i++)
   {
+    Serial.print("ValueStart: ");
+    Serial.println(ValueStart[i]);
+    char Temp[70]="";
+    convertStrtoHEXStr((uint8_t*)&Data[ValueStart[i]], Temp, 15);
+    Serial.println(Temp);
     if(i == 2)
     {
       uint8_t * pInteger = (uint8_t *) &currentConsume;
-      pInteger[1] = Data[ValueStart[i]+8];
-      pInteger[0] = Data[ValueStart[i]+9];
+      pInteger[1] = Data[ValueStart[i]+7];
+      pInteger[0] = Data[ValueStart[i]+8];
     }
     else
     {
@@ -204,7 +234,7 @@ int16_t evaluateData(uint8_t * Data, uint16_t length, uint32_t * CounterStates)
         break;
       uint8_t * pInteger = (uint8_t *) &CounterStates[i];
       for(int j = 0; j < 4; j++)
-        pInteger[j] = Data[ValueStart[i]+12 - j];
+        pInteger[j] = Data[ValueStart[i]+11 - j];
 //      pInteger[3] = Data[ValueStart[i]+9];
 //      pInteger[2] = Data[ValueStart[i]+10];
 //      pInteger[1] = Data[ValueStart[i]+11];
@@ -228,24 +258,27 @@ int convertStrtoHEXStr(const uint8_t * _Input, char * _Output, uint16_t _CharCou
   return _CharCount * 3;
 }
 //---------------------------------------------------------------------
-void switchSerialInput(uint8_t Counter, uint8_t Mode)
+void switchSerialInput(uint8_t Output, uint8_t Mode)
 {
-  switch (Counter)
+  switch (Output)
   {
   case 1:
-      if(!(Mode & (1<<(Counter-1))))
+      if((Mode & 0x01)==0)
         break;
+      Serial.println("Ausgang Z1");
       digitalWrite(IOZ1, 1);
       digitalWrite(IOZ2, 0);
       break;
   case 2:
-      if(!(Mode & (1<<(Counter-1))))
+      if((Mode & 0x02)==0)
         break;
+      Serial.println("Ausgang Z2");
       digitalWrite(IOZ1, 0);
       digitalWrite(IOZ2, 1);
       break;
   
   default:
+      Serial.println("Ausgang Aus");
       digitalWrite(IOZ1, 0);
       digitalWrite(IOZ2, 0);
       break;
