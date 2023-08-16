@@ -14,27 +14,22 @@ const uint8_t MSGStartMeterReadingSupply[] = {0x01, 0x00, 0x02, 0x08, 0x00, 0xFF
 const uint8_t MSGEnd[] = {0x01, 0x77, 0x07};
 unsigned long TimeOut = 0;
 uint32_t CountVar = 0; //Variable for count the successful data reception
-int16_t currentUsage[2] = {0, 0};
-uint32_t counterValue[2][2] = {0, 0, 0, 0};
-uint32_t counterValueOld[2][2] = {0, 0, 0, 0};
+//uint32_t counterValueOld[2][2] = {0, 0, 0, 0};
 uint8_t ReadRelationsCount = 0;
-char Buffer[450] = "";
-
+char * Buffer = 0;
+//char Buffer[380];
 
 
 //-----------------------------------
 //Variablen und Funktion zur Fehlersuche (Absturz Nano nach Empfang von Nachrichten)
 //MQTT Variablen
-EthernetClient * e_client = 0;
-PubSubClient * MQTTclient = 0;
+// EthernetClient * e_client = 0;
+// PubSubClient * MQTTclient = 0;
+EthernetClient e_client;
+PubSubClient MQTTclient(e_client);
 
 
 //-----------------------------------
-unsigned long Break_200ms = 0;                             //Variable fuer Dinge die alle 200ms ausgefuehrt werden
-unsigned long Break_1s = 0;                                //Variable fuer Dinge die alle 1s ausgefuehrt werden
-unsigned long Break_60s = 0;                               //Variable fuer Dinge die alle 60s ausgefuehrt werden
-unsigned long Break_10m = 0;                               //Variable fuer Dinge die alle 10m ausgefuehrt werden
-unsigned long Break_h = 0;                                 //Variable fuer Dinge die alle 1h ausgefuehrt werden
 
 
 

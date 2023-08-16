@@ -5,67 +5,88 @@
 #include "Project_Settings_1.h"
 #include "GlobalVariabels.h"
 #include <avr/wdt.h>
-//#define BGTDEBUG 1
 #define IOZ2 2
 #define IOZ1 3
 
 
 
-int convertStrtoHEXStr(const uint8_t * _Input, char * _Output, uint16_t _CharCount);
+//int convertStrtoHEXStr(const uint8_t * _Input, char * _Output, uint16_t _CharCount);
 int16_t evaluateData(uint8_t * Data, uint16_t length, uint32_t * CounterStates);
 void switchSerialInput(uint8_t Output, uint8_t Mode);
 
 
 void setup() {
   pinMode(IOZ1, OUTPUT);
-  digitalWrite(IOZ1, 0);
   pinMode(IOZ2, OUTPUT);
-  digitalWrite(IOZ2, 0);
+  switchSerialInput(1, Mode);
+
   Serial.begin(9600);
-/*  Ethernet.init(10);
-  delay(1000);
+  Ethernet.init(10);
+  #ifdef BGTDEBUG2
+    Serial.println("EI B");
+  #endif
   if(Ethernet.begin(mac)) //Configure IP address via DHCP
   {
     #ifdef BGTDEBUG
       Serial.println(Ethernet.localIP());
       Serial.println(Ethernet.gatewayIP());
       Serial.println(Ethernet.subnetMask());
+      Serial.println("Eth_ok");
     #endif
-    e_client = new EthernetClient;
-    MQTTclient = new PubSubClient(*e_client);
-    #ifdef BGTDEBUG
-      Serial.println("MQTTclient Variable mit Ethernet-Client erstellt");
-    #endif
+    // e_client = new EthernetClient;
+    // delay(300);
+    // MQTTclient = new PubSubClient(e_client);
+    // delay(300);
+    // #ifdef BGTDEBUG
+    //   Serial.println("Var erstellt");
+    // #endif
   }
   else
   {
-    #ifdef BGTDEBUG
-      Serial.println("Ethernet starten fehlgeschlagen");
+    #ifdef BGTDEBUG2
+      Serial.println("EFehler");
     #endif
   }
-  MQTTinit();
-  */
+  while(!MQTTinit())
+  {
+    #ifdef BGTDEBUG
+      delay(500);
+      Serial.print("MQTT: ");
+      Serial.println(MQTTclient.state());
+      Serial.print("ETH: ");
+      Serial.println(Ethernet.linkStatus());
+    #endif
+  }
+  #ifdef BGTDEBUG2
+    Serial.println("MQTT_OK");
+    //Serial.println("MQTT_D");
+    Serial.println(MQTTclient.state());
+  #endif
+
   wdt_enable(WDTO_4S);
-  delay(1000);
-  TimeOut = millis() + readTimeout_Seconds *1000;
-  switchSerialInput(1, Mode);
+  MQTT_sendMessage(MQTT_MSG_Mode, (int) Mode);
+  TimeOut = millis() + (unsigned long) readTimeout_Seconds * 1000;
 }
 
 void loop() {
-
+  MQTTclient.loop();
   if((TimeOut < millis()) && (Mode & 0x03))
   {
-    #ifdef BGTDEBUG
+    #ifdef BGTDEBUG2
       Serial.print("Timeout Z");
       Serial.println((CountVar%2) +1);
     #endif
 
     Mode &= ~(1<<((CountVar)%2));
+    char Temp[10] = "";
+    MQTT_sendMessage(MQTT_MSG_Mode, Mode);
+    sprintf(Temp, "Timeout %u", (unsigned int) ((CountVar)%2));
+    MQTT_sendText(MQTT_MSG_Error, Temp);
     CountVar++;
     switchSerialInput(((CountVar)%2) + 1, Mode);
-    TimeOut = millis() + readTimeout_Seconds * 1000;
+    TimeOut = millis() + (unsigned long) readTimeout_Seconds * 1000;
 
-    #ifdef BGTDEBUG
+    #ifdef BGTDEBUG2
       Serial.print("Mode: ");
       Serial.println(Mode);
     #endif
@@ -73,35 +94,55 @@ void loop() {
   }
   if (Serial.available()) //Daten auf Serieller Schnittstelle angekommen
   {
-    int length = Serial.readBytes(Buffer, 450);
+    int16_t currentUsage = 0;
+    uint32_t counterValue[2] = {0, 0};
+    Buffer = (char*)malloc(380);
+    int length = Serial.readBytes(Buffer, 380);
+    Serial.println(length);
     Buffer[length] = 0;
-    #ifdef BGTDEBUG
+    #ifdef BGTDEBUG2
       Serial.print("Länge: ");
       Serial.println(length);
     #endif
     if(length < 300)
-      goto End;
-    switchSerialInput(((CountVar + 1)%2) + 1, Mode);
-    TimeOut = millis() + readTimeout_Seconds * 1000;
-    currentUsage[CountVar%2] = evaluateData((uint8_t *)Buffer, length, &counterValue[CountVar%2][0]);
-
-    if(((counterValue[CountVar%2][0]-counterValueOld[CountVar%2][0]) < 1000)&&((counterValue[CountVar%2][1]-counterValueOld[CountVar%2][1]) < 1000))
     {
-//      MQTT_sendMessage(MQTT_MSG_PowerConsumption + (CountVar%2), currentUsage[CountVar%2]);
-//      MQTT_sendMessage(MQTT_MSG_MeterReadingConsumption + (CountVar%2), counterValue[CountVar%2][0]);
-//      MQTT_sendMessage(MQTT_MSG_MeterReadingSupply + (CountVar%2), counterValue[CountVar%2][1]);
-      Serial.print("currentUsageZ");
-      Serial.print(CountVar%2 + 1);
-      Serial.print(": ");
-      Serial.println(currentUsage[CountVar%2]);
-      Serial.print("counterValue1Z");
-      Serial.print(CountVar%2 + 1);
-      Serial.print(": ");
-      Serial.println(counterValue[CountVar%2][0]);
-      Serial.print("counterValue2Z");
-      Serial.print(CountVar%2 + 1);
-      Serial.print(": ");
-      Serial.println(counterValue[CountVar%2][1]);
+      free(Buffer);
+      goto End;
+    }
+    else
+    {
+      ReadRelationsCount++;
+      if(((Mode & 0x03)==0x03)&&(ReadRelationsCount >= ReadRelations[CountVar%2]))
+      {
+        switchSerialInput(((CountVar+1)%2) + 1, Mode);
+      }
+    }
+
+    TimeOut = millis() + (unsigned long) readTimeout_Seconds * 1000;
+    currentUsage = evaluateData((uint8_t *)Buffer, length, counterValue);
+    free(Buffer);
+    MQTT_sendMessage(MQTT_MSG_PowerConsumption + (CountVar%2), currentUsage);
+    MQTT_sendMessage(MQTT_MSG_MeterReadingConsumption + (CountVar%2), counterValue[0]);
+    MQTT_sendMessage(MQTT_MSG_MeterReadingSupply + (CountVar%2), counterValue[1]);
+/*    if(((counterValue[CountVar%2][0]-counterValueOld[CountVar%2][0]) < 1000)&&((counterValue[CountVar%2][1]-counterValueOld[CountVar%2][1]) < 1000))
+    {
+      MQTT_sendMessage(MQTT_MSG_PowerConsumption + (CountVar%2), currentUsage[CountVar%2]);
+      MQTT_sendMessage(MQTT_MSG_MeterReadingConsumption + (CountVar%2), counterValue[CountVar%2][0]);
+      MQTT_sendMessage(MQTT_MSG_MeterReadingSupply + (CountVar%2), counterValue[CountVar%2][1]);
+       #ifdef BGTDEBUG2    
+        Serial.print("currentUsageZ");
+        Serial.print(CountVar%2 + 1);
+        Serial.print(": ");
+        Serial.println(currentUsage[CountVar%2]);
+        Serial.print("counterValue1Z");
+        Serial.print(CountVar%2 + 1);
+        Serial.print(": ");
+        Serial.println(counterValue[CountVar%2][0]);
+        Serial.print("counterValue2Z");
+        Serial.print(CountVar%2 + 1);
+        Serial.print(": ");
+        Serial.println(counterValue[CountVar%2][1]);
+      #endif
       counterValueOld[CountVar%2][0] = counterValue[CountVar%2][0];
       counterValueOld[CountVar%2][1] = counterValue[CountVar%2][1];
     }
@@ -111,9 +152,16 @@ void loop() {
         counterValueOld[CountVar%2][0] = counterValue[CountVar%2][0];
       if((counterValueOld[CountVar%2][1] == 0)&&(counterValue[CountVar%2][1]))
         counterValueOld[CountVar%2][1] = counterValue[CountVar%2][1];
-    }
-    ReadRelationsCount++;
-    if(((Mode & 0x03)==3)&&(ReadRelationsCount >= ReadRelations[CountVar%2]))
+    }*/
+    #ifdef BGTDEBUG2    
+      Serial.print("VerhältnissZähler: ");
+      Serial.print(ReadRelationsCount);
+      Serial.print(" | Soll: ");
+      Serial.print(ReadRelations[CountVar%2]);
+      Serial.print(" | Mode: ");
+      Serial.println(Mode);
+    #endif
+    if(((Mode & 0x03)==0x03)&&(ReadRelationsCount >= ReadRelations[CountVar%2]))
     {
       CountVar++;
       ReadRelationsCount = 0;
@@ -216,11 +264,13 @@ int16_t evaluateData(uint8_t * Data, uint16_t length, uint32_t * CounterStates)
   }
   for(int i = 0; i < 3; i++)
   {
-    Serial.print("ValueStart: ");
-    Serial.println(ValueStart[i]);
+    #ifdef BGTDEBUG2
+      Serial.print("ValueStart: ");
+      Serial.println(ValueStart[i]);
     char Temp[70]="";
     convertStrtoHEXStr((uint8_t*)&Data[ValueStart[i]], Temp, 15);
     Serial.println(Temp);
+    #endif
     if(i == 2)
     {
       uint8_t * pInteger = (uint8_t *) &currentConsume;
@@ -265,20 +315,20 @@ void switchSerialInput(uint8_t Output, uint8_t Mode)
   case 1:
       if((Mode & 0x01)==0)
         break;
-      Serial.println("Ausgang Z1");
+//      Serial.println("Ausgang Z1");
       digitalWrite(IOZ1, 1);
       digitalWrite(IOZ2, 0);
       break;
   case 2:
       if((Mode & 0x02)==0)
         break;
-      Serial.println("Ausgang Z2");
+//      Serial.println("Ausgang Z2");
       digitalWrite(IOZ1, 0);
       digitalWrite(IOZ2, 1);
       break;
   
   default:
-      Serial.println("Ausgang Aus");
+//      Serial.println("Ausgang Aus");
       digitalWrite(IOZ1, 0);
       digitalWrite(IOZ2, 0);
       break;
