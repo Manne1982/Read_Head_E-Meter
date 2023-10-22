@@ -69,7 +69,30 @@ void setup() {
 }
 
 void loop() {
-  MQTTclient.loop();
+  if(!MQTTclient.loop()){
+    if(TimeOut < millis())
+    {
+      if(Ethernet.linkStatus() == LinkON)
+      {
+        if(!MQTTinit())
+        {
+          TimeOut = millis() + 300000;
+          goto End;
+        }
+        else
+        TimeOut = millis() + (unsigned long) readTimeout_Seconds * 1000;
+      }
+      else
+      {
+        Ethernet.begin(mac);
+        goto End;
+      }
+    }
+    else
+    {
+      goto End;
+    }
+  }
   if((TimeOut < millis()) && (Mode & 0x03))
   {
     #ifdef BGTDEBUG2
